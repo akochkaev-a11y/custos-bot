@@ -1,14 +1,8 @@
 #!/usr/bin/env bash
 set -uo pipefail
-python3 - <<'PY'
-import socket
-for h in ('api.telegram.org','telegram.org'):
-    try: print(h, sorted({str(x[4][0]) for x in socket.getaddrinfo(h,443)}))
-    except Exception as e: print(h,type(e).__name__)
-PY
-for fam in -4 -6; do
-  printf 'Telegram HTTPS %s: ' "$fam"
-  curl "$fam" -sS -o /dev/null --connect-timeout 5 --max-time 8 -w 'http=%{http_code} ip=%{remote_ip}\n' https://api.telegram.org || true
+curl -sS --connect-timeout 5 --max-time 8 -H 'accept: application/dns-json' 'https://cloudflare-dns.com/dns-query?name=api.telegram.org&type=A'
+printf '\n'
+for ip in 149.154.167.220 149.154.167.99; do
+  printf 'TLS api.telegram.org via %s: ' "$ip"
+  curl -4 -sS --resolve "api.telegram.org:443:$ip" -o /dev/null --connect-timeout 4 --max-time 6 -w 'http=%{http_code}\n' https://api.telegram.org || true
 done
-printf 'GitHub HTTPS: '
-curl -4 -sS -o /dev/null --connect-timeout 5 --max-time 8 -w 'http=%{http_code}\n' https://github.com || true
