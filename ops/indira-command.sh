@@ -10,3 +10,4 @@ for unit in atolin-assistant geostrategy geostrategy-apk custos; do
   printf '%s: ' "$unit"
   systemctl is-active "$unit" || true
 done
+# Retry with exact console-verified host key.
