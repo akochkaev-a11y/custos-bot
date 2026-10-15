@@ -1,0 +1,40 @@
+name: Verify Telegram token
+on:
+  push:
+    branches: [main]
+    paths: ['ops/verify-telegram.request']
+permissions:
+  contents: read
+jobs:
+  verify:
+    if: github.repository == 'akochkaev-a11y/custos-bot' && github.actor == 'akochkaev-a11y'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify bot and owner without printing credentials
+        env:
+          CUSTOS_BOT_TOKEN: ${{ secrets.CUSTOS_BOT_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import os
+          from custos import API, APIError, UPDATES
+          from deploy.configure import verified_owner
+          api = API(os.environ['CUSTOS_BOT_TOKEN'].strip())
+          try:
+              me = api.call('getMe')
+              if me.get('username') != 'custos_dialog_bot':
+                  raise SystemExit('Token is for a different bot')
+              print('Telegram token verified: Custos')
+              print('Webhook configured:', bool(api.call('getWebhookInfo').get('url')))
+              updates = api.call('getUpdates', timeout=0, limit=100, allowed_updates=UPDATES)
+              try:
+                  verified_owner(updates, api)
+                  print('Owner verified from start and business connection')
+              except ValueError:
+                  print('Owner pairing needs a fresh start and automation connection')
+          except APIError as e:
+              raise SystemExit(f'Telegram validation code={e.code}') from None
+          PY
