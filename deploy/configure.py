@@ -7,7 +7,7 @@ import pwd
 import secrets
 import sqlite3
 import sys
-sys.path.insert(0, '/opt/custos')
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from custos import API, APIError, Custos, UPDATES
 
 
