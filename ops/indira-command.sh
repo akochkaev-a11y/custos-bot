@@ -1,15 +1,18 @@
 #!/usr/bin/env bash
 set -uo pipefail
-printf 'OUTPUT policy and rules\n'
-iptables -S OUTPUT 2>/dev/null || true
-nft list ruleset 2>/dev/null | head -100 || true
-printf 'Routes\n'
-ip route get 149.154.166.110
-printf 'TCP reachability\n'
+printf 'Telegram connectivity recheck\n'
+curl -4 -sS -o /dev/null --connect-timeout 5 --max-time 8 -w 'Telegram HTTP=%{http_code}\n' https://api.telegram.org || true
+printf 'Available connection tools\n'
+for tool in wg openvpn tailscale sing-box xray; do command -v "$tool" >/dev/null && printf '%s installed\n' "$tool"; done
+printf 'Tunnel interfaces\n'
+ip -o link show | awk -F': ' '{print $2}' | sed 's/@.*//' | sort -u
+printf 'Proxy settings present (values hidden)\n'
 python3 - <<'PY'
-import socket
-for host,port in [('149.154.166.110',443),('149.154.166.110',80),('api.telegram.org',443),('github.com',443)]:
- try:
-  s=socket.create_connection((host,port),4);s.close();print(host,port,'OK')
- except OSError as e: print(host,port,type(e).__name__)
+import os
+for k in os.environ:
+ if k.lower().endswith('_proxy'):print(k+' configured')
+from pathlib import Path
+for p in ['/etc/wireguard','/etc/openvpn/client','/etc/sing-box','/usr/local/etc/xray']:
+ d=Path(p)
+ if d.is_dir(): print(p+': '+str(sum(1 for f in d.iterdir() if f.is_file()))+' configuration files')
 PY
