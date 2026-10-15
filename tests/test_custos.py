@@ -62,6 +62,18 @@ class ArchiveTests(unittest.TestCase):
         self.pair()
         self.assertEqual(self.bot.db.execute('SELECT count(*) FROM messages').fetchone()[0],1)
 
+    def test_new_message_is_copied_immediately_without_local_download(self):
+        self.pair()
+        m = message()
+        m['photo'] = [{'file_id':'fid','file_unique_id':'unique'}]
+        self.event(11,business_message=m)
+        self.assertTrue(any('Сохранено сообщение' in q.get('text','') for q in self.queued()))
+        self.assertTrue(any(q.get('message',{}).get('photo') for q in self.queued()))
+        self.assertEqual(self.bot.db.execute('SELECT count(*) FROM files').fetchone()[0],0)
+        count = len(self.queued())
+        self.event(12,business_message=m)
+        self.assertEqual(len(self.queued()),count)
+
     def test_original_and_edit(self):
         self.pair()
         self.event(11,business_message=message())
@@ -148,6 +160,7 @@ class ArchiveTests(unittest.TestCase):
         m=message()
         m['photo']=[{'file_id':'fid','file_unique_id':'unique'}]
         self.event(11,business_message=m)
+        self.bot.db.execute("INSERT OR IGNORE INTO files(id,state) VALUES('fid','pending')")
         self.bot.download_one()
         self.assertEqual(self.bot.db.execute('SELECT state FROM files').fetchone()[0],'saved')
         self.bot.db.execute('DELETE FROM outbox')

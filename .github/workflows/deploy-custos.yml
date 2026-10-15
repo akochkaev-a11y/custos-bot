@@ -61,6 +61,10 @@ jobs:
           tar -cf "$RUNNER_TEMP/custos-source.tar" custos.py deploy tests
           scp "${ssh_opts[@]}" "$RUNNER_TEMP/custos-source.tar" root@87.228.13.236:/root/custos-transfer.tar
           ssh "${ssh_opts[@]}" root@87.228.13.236 'mkdir -p /root/custos-deploy && tar -xf /root/custos-transfer.tar -C /root/custos-deploy && bash /root/custos-deploy/deploy/stage.sh'
+          if grep -qx 'stage-only' ops/deploy-custos.request; then
+            echo 'Custos installed; activation deferred until Telegram connectivity is available'
+            exit 0
+          fi
           printf '%s' "$CUSTOS_BOT_TOKEN" | ssh "${ssh_opts[@]}" root@87.228.13.236 'python3 /opt/custos/deploy/configure.py'
           ssh "${ssh_opts[@]}" root@87.228.13.236 'systemctl enable --now custos.service && sleep 10 && systemctl is-active custos.service'
       - name: Remove temporary SSH files

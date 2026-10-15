@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Custos 0.1 - private Telegram Business archive. Python 3.12, stdlib only."""
+"""Custos 0.2 - private Telegram Business archive. Python 3.12, stdlib only."""
 import hashlib
 import hmac
 import json
@@ -170,10 +170,6 @@ class Custos:
         body = json.dumps(m)
         self.db.execute('INSERT OR IGNORE INTO versions VALUES(?,?,?,?,?)', (*key,digest,body))
         self.db.execute('INSERT OR REPLACE INTO messages VALUES(?,?,?,?)', (*key,body))
-        _, media = attachment(m)
-        if media:
-            self.db.execute('INSERT OR IGNORE INTO files(id,state) VALUES(?,?)',
-                            (media['file_id'], 'pending'))
 
     def connection(self, conn):
         row = self.db.execute('SELECT enabled FROM connections WHERE id=?', (conn,)).fetchone()
@@ -217,13 +213,13 @@ class Custos:
             text = m.get('text','')
             if text.startswith('/start'):
                 self.enqueue(str(uid), 'Custos подключён. Отслеживаю новые сообщения в разрешённых чатах. '
-                             'Удаления и правки отправляю сюда. /status - состояние. '
+                             'Копии новых сообщений, удаления и правки отправляю сюда. /status - состояние. '
                              'Ответ на сообщение в выбранном чате - запрос копии доступного вложения.')
             elif text == '/status':
                 count = self.db.execute('SELECT count(*) FROM messages').fetchone()[0]
                 pending = self.db.execute('SELECT count(*) FROM outbox WHERE done=0').fetchone()[0]
                 active = self.db.execute('SELECT count(*) FROM connections WHERE enabled=1').fetchone()[0]
-                self.enqueue(str(uid), f'Custos 0.1\nСоединений: {active}\nСообщений: {count}\n'
+                self.enqueue(str(uid), f'Custos 0.2\nСоединений: {active}\nСообщений: {count}\n'
                              f'Уведомлений в очереди: {pending}\n'
                              f'Свободно на диске: {shutil.disk_usage(self.root).free//1024**2} МиБ')
             return
@@ -258,6 +254,8 @@ class Custos:
                               (conn,m['chat']['id'],m['message_id'])).fetchone()
         old = json.loads(row[0]) if row else None
         self.save(conn,m)
+        if not edited and old is None:
+            self.enqueue(str(uid)+':original', 'Сохранено сообщение\n' + describe(m), m)
         if edited and (not old or signature(old) != signature(m)):
             self.enqueue(str(uid), 'Изменено сообщение\nБыло:\n' +
                          (describe(old) if old else 'Исходная версия отсутствует') + '\n\nСтало:\n' + describe(m), old)
@@ -357,14 +355,13 @@ def main():
     webhook = bot.api.call('getWebhookInfo')
     if webhook.get('url'):
         raise SystemExit('Webhook already configured. Stop existing deployment before polling.')
-    LOG.info('Custos 0.1 started')
+    LOG.info('Custos 0.2 started')
     while running:
         try:
             updates = bot.api.call('getUpdates', offset=int(bot.get('offset')), timeout=5,
                                    allowed_updates=UPDATES)
             bot.ingest(updates)
             bot.process()
-            bot.download_one()
             for _ in range(10):
                 bot.deliver_one()
         except APIError as error:
