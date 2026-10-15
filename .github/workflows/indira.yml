@@ -1,0 +1,66 @@
+name: Indira server command
+
+on:
+  push:
+    branches: [main]
+    paths: ['ops/indira-command.sh']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: indira-server-command
+  cancel-in-progress: false
+
+jobs:
+  execute:
+    if: github.repository == 'akochkaev-a11y/custos-bot' && github.ref == 'refs/heads/main' && github.actor == 'akochkaev-a11y'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Prepare SSH identity
+        env:
+          INDIRA_SSH_KEY: ${{ secrets.INDIRA_SSH_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$RUNNER_TEMP/indira-ssh"
+          python3 - <<'PY'
+          import os, pathlib, re
+          raw = os.environ.get("INDIRA_SSH_KEY", "").strip()
+          if not raw:
+              raise SystemExit("INDIRA_SSH_KEY is missing")
+          raw = raw.replace("\\n", "\n")
+          payload = re.sub(r"-----BEGIN OPENSSH PRIVATE KEY-----|-----END OPENSSH PRIVATE KEY-----|\s+", "", raw)
+          if not re.fullmatch(r"[A-Za-z0-9+/=]+", payload):
+              raise SystemExit("Invalid SSH key format; replace INDIRA_SSH_KEY")
+          key = "-----BEGIN OPENSSH PRIVATE KEY-----\n"
+          key += "\n".join(payload[i:i+70] for i in range(0, len(payload), 70))
+          key += "\n-----END OPENSSH PRIVATE KEY-----\n"
+          path = pathlib.Path(os.environ["RUNNER_TEMP"]) / "indira-ssh/key"
+          path.write_text(key)
+          path.chmod(0o600)
+          PY
+          ssh-keygen -y -f "$RUNNER_TEMP/indira-ssh/key" >/dev/null
+          test -s ops/indira_known_hosts
+          cp ops/indira_known_hosts "$RUNNER_TEMP/indira-ssh/known_hosts"
+      - name: Execute reviewed server script
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n ops/indira-command.sh
+          ssh -T -i "$RUNNER_TEMP/indira-ssh/key" \
+            -o BatchMode=yes -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$RUNNER_TEMP/indira-ssh/known_hosts" \
+            -o ConnectTimeout=15 -o ServerAliveInterval=20 \
+            root@87.228.13.236 'bash -se' < ops/indira-command.sh
+      - name: Remove temporary SSH files
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/indira-ssh"
