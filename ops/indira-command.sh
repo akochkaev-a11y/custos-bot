@@ -2,23 +2,28 @@
 set -euo pipefail
 python3 - <<'PY'
 from pathlib import Path
-import json,re,datetime
-latest={}
+from collections import Counter
+import json,re
+replies=set();visits=set();totals=set()
 for p in Path('/var/lib/atolin-assistant/users').glob('*/reports.jsonl'):
  with p.open() as f:
-  for line in f:
-   try:r=json.loads(line)
+  for raw in f:
+   try:r=json.loads(raw)
    except:continue
-   if r.get('ended',0)<1792098000000:continue
-   b=r.get('body','')[:5500]
-   if r.get('kind')=='dialogs':
-    latest[r['key']]={'started':r['started'],'ended':r['ended'],'title':r['title'],'summary':b}
-for key,r in sorted(latest.items(),key=lambda x:x[1]['started']):
- if not key.endswith('.1'):continue
- b=r['summary'];cycle=re.search(r'Рабочий цикл поиска: №(\d+)',b)
- if not cycle:continue
- total=re.search(r'Всего подтверждённых автоответов:\s*(\d+)',b)
- session=re.search(r'Автоответов за текущий запуск:\s*(\d+)',b)
- visit=re.search(r'Посещения: пройдено (\d+), открыто (\d+), пропущено (\d+)',b)
- print(json.dumps({'start':datetime.datetime.fromtimestamp(r['started']/1000,datetime.timezone(datetime.timedelta(hours=3))).strftime('%m-%d %H:%M:%S'),'end':datetime.datetime.fromtimestamp(r['ended']/1000,datetime.timezone(datetime.timedelta(hours=3))).strftime('%m-%d %H:%M:%S'),'cycle':int(cycle[1]),'result':r['title'].split(' · ')[1],'total':int(total[1]) if total else None,'session':int(session[1]) if session else None,'visit':[int(n) for n in visit.groups()] if visit else None}))
+   if r.get('kind')!='dialogs':continue
+   b=r.get('body','')
+   for line in b.splitlines():
+    if not line.startswith('2026-10-16 '):continue
+    m=re.search(r'^([0-9-]+ [0-9:.]+).* · ACTION .*отчёт=(\d+) \| Автоответ подтверждён:',line)
+    if m:replies.add((m[1],int(m[2])))
+    m=re.search(r'^([0-9-]+ [0-9:.]+).* · ACTION .*отчёт=(\d+) \| Посещения завершены: открыто (\d+), пропущено (\d+), с перепиской (\d+)',line)
+    if m:visits.add(tuple(m.groups()))
+   if r.get('key','').endswith('.1'):
+    m=re.search(r'Всего подтверждённых автоответов:\s*(\d+)',b[:5500])
+    if m:totals.add((r['started'],int(m[1])))
+print('CONFIRMED_REPLY_EVENTS_BY_CYCLE',dict(sorted(Counter(c for _,c in replies).items())))
+print('CONFIRMED_REPLY_EVENTS_TOTAL',len(replies))
+print('CONFIRMED_REPLY_TIMES',sorted(replies))
+print('COMPLETED_VISITS',sorted(visits))
+print('CUMULATIVE_COUNTER_SNAPSHOTS',sorted(totals))
 PY
