@@ -1,13 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
-cd /opt/atolin-assistant
-test -z "$(git status --porcelain)"
-backup="/etc/atolin-assistant/backups/report-memory-$(date -u +%Y%m%dT%H%M%SZ)"
-install -d -m 700 "$backup"
-cp server/reports.cjs server/index.cjs "$backup/"
-git rev-parse HEAD > "$backup/previous-revision"
-cp /etc/atolin-assistant/deployed-revision "$backup/deployed-revision"
-bash server/deploy/update-atolin
-test "$(git rev-parse HEAD)" = cf85b75a931fa7ff0e1a881872dfc0b6acbfc532
-systemctl show atolin-assistant -p ActiveState -p NRestarts -p MemoryCurrent -p MemoryPeak -p MemoryMax
-printf 'Deployed bounded report reader; original history and share files retained.\n'
+systemctl show atolin-assistant -p ActiveState -p NRestarts -p MemoryCurrent -p MemoryPeak -p MemoryMax -p ExecMainStartTimestamp
+python3 - <<'PY'
+import subprocess,json
+raw=subprocess.run(['journalctl','-u','atolin-assistant','--since','2026-10-16 15:48:15 UTC','--no-pager','-o','cat'],capture_output=True,text=True).stdout
+print('POST_DEPLOY_OOM_EVENTS',raw.count("Failed with result 'oom-kill'"))
+from pathlib import Path
+print('REPORT_HISTORY_BYTES',sorted(p.stat().st_size for p in Path('/var/lib/atolin-assistant/users').glob('*/reports.jsonl')))
+PY
+systemctl is-active atolin-assistant nginx geostrategy geostrategy-apk
