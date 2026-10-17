@@ -1,29 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
+/usr/local/bin/atolin-sync-download
 python3 - <<'PY'
+import json
 from pathlib import Path
-from collections import Counter
-import json,re
-replies=set();visits=set();totals=set()
-for p in Path('/var/lib/atolin-assistant/users').glob('*/reports.jsonl'):
- with p.open() as f:
-  for raw in f:
-   try:r=json.loads(raw)
-   except:continue
-   if r.get('kind')!='dialogs':continue
-   b=r.get('body','')
-   for line in b.splitlines():
-    if not line.startswith('2026-10-16 '):continue
-    m=re.search(r'^([0-9-]+ [0-9:.]+).* · ACTION .*отчёт=(\d+) \| Автоответ подтверждён:',line)
-    if m:replies.add((m[1],int(m[2])))
-    m=re.search(r'^([0-9-]+ [0-9:.]+).* · ACTION .*отчёт=(\d+) \| Посещения завершены: открыто (\d+), пропущено (\d+), с перепиской (\d+)',line)
-    if m:visits.add(tuple(m.groups()))
-   if r.get('key','').endswith('.1'):
-    m=re.search(r'Всего подтверждённых автоответов:\s*(\d+)',b[:5500])
-    if m:totals.add((r['started'],int(m[1])))
-print('CONFIRMED_REPLY_EVENTS_BY_CYCLE',dict(sorted(Counter(c for _,c in replies).items())))
-print('CONFIRMED_REPLY_EVENTS_TOTAL',len(replies))
-print('CONFIRMED_REPLY_TIMES',sorted(replies))
-print('COMPLETED_VISITS',sorted(visits))
-print('CUMULATIVE_COUNTER_SNAPSHOTS',sorted(totals))
+m=json.loads(Path('/var/lib/atolin-downloads/current/manifest.json').read_text())
+assert m['versionCode']==103 and m['versionName']=='0.103'
+assert m['sourceCommit']=='467018cabf6b79ea20e88321fc4f102f26632066'
+assert m['sha256']=='25ab1f370f134cc0eb06f1f3430e5e06eeeb98391d22695de28c173ef65b23d7'
+print('PUBLISHED_VERSION',m['versionName'],'VERSION_CODE',m['versionCode'],'SHA256',m['sha256'])
 PY
+temp_apk=$(mktemp /tmp/atolin-103-verify.XXXXXX)
+trap 'rm -f "$temp_apk"' EXIT
+curl --fail --silent --show-error --max-time 30 https://87.228.13.236/d/c915d17b1b8e072a/app.apk -o "$temp_apk"
+digest=$(sha256sum "$temp_apk" | cut -d' ' -f1)
+test "$digest" = 25ab1f370f134cc0eb06f1f3430e5e06eeeb98391d22695de28c173ef65b23d7
+printf 'Public download matches verified 0.103 APK.\n'
+systemctl is-active atolin-assistant nginx geostrategy geostrategy-apk
