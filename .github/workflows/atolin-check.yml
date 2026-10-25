@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      ATOLIN_SOURCE_SHA: 7bf20caf46777ed90cabf7fb035a58d0f52fcc14
+      ATOLIN_SOURCE_SHA: 71683c24eafc5fa68ffa3b2b7c23dc65df8f4828
     steps:
       - uses: actions/checkout@v4
         with:
@@ -47,7 +47,7 @@ jobs:
           umask 077
           [[ "$ATOLIN_SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
           mkdir private-source
-          "$RUNNER_TEMP/indira-ssh/ssh" "git -C /opt/atolin-assistant archive $ATOLIN_SOURCE_SHA" > "$RUNNER_TEMP/source.tar"
+          "$RUNNER_TEMP/indira-ssh/ssh" "git -C /opt/atolin-assistant fetch origin fix/http-search-recovery-106 > /var/lib/atolin-build-106/fetch.log 2>&1 && git -C /opt/atolin-assistant archive $ATOLIN_SOURCE_SHA" > "$RUNNER_TEMP/source.tar"
           tar -xf "$RUNNER_TEMP/source.tar" -C private-source
       - uses: actions/setup-node@v4
         with:
