@@ -8,14 +8,14 @@ permissions:
   contents: read
 concurrency:
   group: atolin-private-validation
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   verify:
     if: github.repository == 'akochkaev-a11y/custos-bot' && github.ref == 'refs/heads/main' && github.actor == 'akochkaev-a11y'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      ATOLIN_SOURCE_SHA: 71683c24eafc5fa68ffa3b2b7c23dc65df8f4828
+      ATOLIN_SOURCE_SHA: a2d8f99c4b1ce7de5114c7561a591e44619fc6e6
     steps:
       - uses: actions/checkout@v4
         with:
