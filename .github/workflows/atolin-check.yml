@@ -7,7 +7,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: atolin-private-validation-107
+  group: atolin-private-validation-108
   cancel-in-progress: true
 jobs:
   verify:
@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      ATOLIN_SOURCE_SHA: 34a0227954395064a98d36b0da592092ad52e91c
+      ATOLIN_SOURCE_SHA: 98547885073f73c9d697209d3e57d5b027b6b811
     steps:
       - uses: actions/checkout@v4
         with:
@@ -47,9 +47,10 @@ jobs:
           umask 077
           [[ "$ATOLIN_SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
           mkdir private-source
-          "$RUNNER_TEMP/indira-ssh/ssh" 'umask 077; mkdir -p /var/lib/atolin-build-107/ci'
-          "$RUNNER_TEMP/indira-ssh/ssh" "git -C /opt/atolin-assistant fetch origin feature/search-composition-107 > /var/lib/atolin-build-107/fetch.log 2>&1 && git -C /opt/atolin-assistant archive $ATOLIN_SOURCE_SHA" > "$RUNNER_TEMP/source.tar"
+          "$RUNNER_TEMP/indira-ssh/ssh" 'umask 077; mkdir -p /var/lib/atolin-build-108/ci'
+          "$RUNNER_TEMP/indira-ssh/ssh" "git -C /opt/atolin-assistant fetch origin fix/startup-history-108 > /var/lib/atolin-build-108/fetch.log 2>&1 && git -C /opt/atolin-assistant archive $ATOLIN_SOURCE_SHA" > "$RUNNER_TEMP/source.tar"
           tar -xf "$RUNNER_TEMP/source.tar" -C private-source
+          "$RUNNER_TEMP/indira-ssh/ssh" 'cat /var/lib/atolin-build-107/ci/verified-107.apk' > "$RUNNER_TEMP/prior-107.apk"
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -87,7 +88,7 @@ jobs:
           set -euo pipefail
           if bash -se > "$RUNNER_TEMP/build.log" 2>&1 <<'TASK'
           gradle --no-daemon clean assembleDebug assembleDebugAndroidTest
-          bash scripts/verify-apk.sh app/build/outputs/apk/debug/app-debug.apk 107 0.107
+          bash scripts/verify-apk.sh app/build/outputs/apk/debug/app-debug.apk 108 0.108
           TASK
           then echo 'PASS: Android application, test APK and pinned signature'; else echo 'Android compilation failed; private log retained'; exit 1; fi
       - name: Enable KVM
@@ -102,28 +103,32 @@ jobs:
           arch: x86_64
           profile: pixel_2
           disable-animations: true
-          script: cd private-source && bash scripts/ui-smoke.sh > "$RUNNER_TEMP/android-ui.log" 2>&1
+          script: |
+            adb install "$RUNNER_TEMP/prior-107.apk" > "$RUNNER_TEMP/upgrade-install.log" 2>&1
+            adb shell am start -W -n ru.atolin.assistant/.MainActivity >> "$RUNNER_TEMP/upgrade-install.log" 2>&1
+            adb shell am force-stop ru.atolin.assistant
+            cd private-source && bash scripts/ui-smoke.sh > "$RUNNER_TEMP/android-ui.log" 2>&1
       - name: Verify fresh Android directory and retain verified APK privately
         working-directory: private-source
         env:
           ANDROID_USER_HOME: ${{ runner.temp }}/atolin-clean-android
         run: |
           set -euo pipefail
-          cp app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/verified-107.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/verified-108.apk"
           if bash -se > "$RUNNER_TEMP/fresh-build.log" 2>&1 <<'TASK'
           gradle --no-daemon clean assembleDebug
-          bash scripts/verify-apk.sh app/build/outputs/apk/debug/app-debug.apk 107 0.107
+          bash scripts/verify-apk.sh app/build/outputs/apk/debug/app-debug.apk 108 0.108
           TASK
           then echo 'PASS: fresh Android directory and pinned signature'; else echo 'Fresh build failed; private log retained'; exit 1; fi
-          "$RUNNER_TEMP/indira-ssh/ssh" 'umask 077; mkdir -p /var/lib/atolin-build-107/ci; cat > /var/lib/atolin-build-107/ci/verified-107.apk' < "$RUNNER_TEMP/verified-107.apk"
-          printf '%s\n' "$ATOLIN_SOURCE_SHA" | "$RUNNER_TEMP/indira-ssh/ssh" 'cat > /var/lib/atolin-build-107/ci/verified-source'
+          "$RUNNER_TEMP/indira-ssh/ssh" 'umask 077; mkdir -p /var/lib/atolin-build-108/ci; cat > /var/lib/atolin-build-108/ci/verified-108.apk' < "$RUNNER_TEMP/verified-108.apk"
+          printf '%s\n' "$ATOLIN_SOURCE_SHA" | "$RUNNER_TEMP/indira-ssh/ssh" 'cat > /var/lib/atolin-build-108/ci/verified-source'
       - name: Retain private diagnostics on server
         if: always()
         run: |
           set -euo pipefail
-          for name in validation build android-ui fresh-build; do
-            if test -f "$RUNNER_TEMP/$name.log"; then "$RUNNER_TEMP/indira-ssh/ssh" "umask 077; mkdir -p /var/lib/atolin-build-107/ci; cat > /var/lib/atolin-build-107/ci/$name.log" < "$RUNNER_TEMP/$name.log"; fi
+          for name in validation build android-ui fresh-build upgrade-install; do
+            if test -f "$RUNNER_TEMP/$name.log"; then "$RUNNER_TEMP/indira-ssh/ssh" "umask 077; mkdir -p /var/lib/atolin-build-108/ci; cat > /var/lib/atolin-build-108/ci/$name.log" < "$RUNNER_TEMP/$name.log"; fi
           done
       - name: Remove temporary private source and access
         if: always()
-        run: rm -rf -- private-source "$RUNNER_TEMP/indira-ssh" "$RUNNER_TEMP/source.tar" "$RUNNER_TEMP/verified-107.apk"
+        run: rm -rf -- private-source "$RUNNER_TEMP/indira-ssh" "$RUNNER_TEMP/source.tar" "$RUNNER_TEMP/verified-108.apk"
