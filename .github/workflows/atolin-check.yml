@@ -7,7 +7,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: atolin-private-validation
+  group: atolin-private-validation-107
   cancel-in-progress: true
 jobs:
   verify:
@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      ATOLIN_SOURCE_SHA: 74fd38ed99a50f2db0894b9021c6519f1585fd1b
+      ATOLIN_SOURCE_SHA: 34a0227954395064a98d36b0da592092ad52e91c
     steps:
       - uses: actions/checkout@v4
         with:
