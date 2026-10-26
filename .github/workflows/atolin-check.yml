@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      ATOLIN_SOURCE_SHA: 67cd0e2d6781f347a4d85e8a08dcf75727e32186
+      ATOLIN_SOURCE_SHA: 74fd38ed99a50f2db0894b9021c6519f1585fd1b
     steps:
       - uses: actions/checkout@v4
         with:
@@ -47,7 +47,8 @@ jobs:
           umask 077
           [[ "$ATOLIN_SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
           mkdir private-source
-          "$RUNNER_TEMP/indira-ssh/ssh" "git -C /opt/atolin-assistant fetch origin fix/http-search-recovery-106 > /var/lib/atolin-build-106/fetch.log 2>&1 && git -C /opt/atolin-assistant archive $ATOLIN_SOURCE_SHA" > "$RUNNER_TEMP/source.tar"
+          "$RUNNER_TEMP/indira-ssh/ssh" 'umask 077; mkdir -p /var/lib/atolin-build-107/ci'
+          "$RUNNER_TEMP/indira-ssh/ssh" "git -C /opt/atolin-assistant fetch origin feature/search-composition-107 > /var/lib/atolin-build-107/fetch.log 2>&1 && git -C /opt/atolin-assistant archive $ATOLIN_SOURCE_SHA" > "$RUNNER_TEMP/source.tar"
           tar -xf "$RUNNER_TEMP/source.tar" -C private-source
       - uses: actions/setup-node@v4
         with:
@@ -72,6 +73,8 @@ jobs:
           done
           javac -cp /tmp/atolin-context-tests -d /tmp/atolin-context-tests app/src/main/java/ru/atolin/assistant/HttpRecoveryPolicy.java app/src/main/java/ru/atolin/assistant/HttpFailureEvidence.java tests/HttpRecoveryTest.java
           java -cp /tmp/atolin-context-tests ru.atolin.assistant.HttpRecoveryTest
+          javac -d /tmp/atolin-context-tests app/src/main/java/ru/atolin/assistant/SearchScope.java tests/SearchScopeTest.java
+          java -cp /tmp/atolin-context-tests ru.atolin.assistant.SearchScopeTest
           python3 tests/report-storage.py
           npm install --no-save --package-lock=false playwright@1.51.1
           npx playwright install --with-deps chromium --only-shell
@@ -84,7 +87,7 @@ jobs:
           set -euo pipefail
           if bash -se > "$RUNNER_TEMP/build.log" 2>&1 <<'TASK'
           gradle --no-daemon clean assembleDebug assembleDebugAndroidTest
-          bash scripts/verify-apk.sh app/build/outputs/apk/debug/app-debug.apk 106 0.106
+          bash scripts/verify-apk.sh app/build/outputs/apk/debug/app-debug.apk 107 0.107
           TASK
           then echo 'PASS: Android application, test APK and pinned signature'; else echo 'Android compilation failed; private log retained'; exit 1; fi
       - name: Enable KVM
@@ -106,21 +109,21 @@ jobs:
           ANDROID_USER_HOME: ${{ runner.temp }}/atolin-clean-android
         run: |
           set -euo pipefail
-          cp app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/verified-106.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/verified-107.apk"
           if bash -se > "$RUNNER_TEMP/fresh-build.log" 2>&1 <<'TASK'
           gradle --no-daemon clean assembleDebug
-          bash scripts/verify-apk.sh app/build/outputs/apk/debug/app-debug.apk 106 0.106
+          bash scripts/verify-apk.sh app/build/outputs/apk/debug/app-debug.apk 107 0.107
           TASK
           then echo 'PASS: fresh Android directory and pinned signature'; else echo 'Fresh build failed; private log retained'; exit 1; fi
-          "$RUNNER_TEMP/indira-ssh/ssh" 'umask 077; mkdir -p /var/lib/atolin-build-106/ci; cat > /var/lib/atolin-build-106/ci/verified-106.apk' < "$RUNNER_TEMP/verified-106.apk"
-          printf '%s\n' "$ATOLIN_SOURCE_SHA" | "$RUNNER_TEMP/indira-ssh/ssh" 'cat > /var/lib/atolin-build-106/ci/verified-source'
+          "$RUNNER_TEMP/indira-ssh/ssh" 'umask 077; mkdir -p /var/lib/atolin-build-107/ci; cat > /var/lib/atolin-build-107/ci/verified-107.apk' < "$RUNNER_TEMP/verified-107.apk"
+          printf '%s\n' "$ATOLIN_SOURCE_SHA" | "$RUNNER_TEMP/indira-ssh/ssh" 'cat > /var/lib/atolin-build-107/ci/verified-source'
       - name: Retain private diagnostics on server
         if: always()
         run: |
           set -euo pipefail
           for name in validation build android-ui fresh-build; do
-            if test -f "$RUNNER_TEMP/$name.log"; then "$RUNNER_TEMP/indira-ssh/ssh" "umask 077; mkdir -p /var/lib/atolin-build-106/ci; cat > /var/lib/atolin-build-106/ci/$name.log" < "$RUNNER_TEMP/$name.log"; fi
+            if test -f "$RUNNER_TEMP/$name.log"; then "$RUNNER_TEMP/indira-ssh/ssh" "umask 077; mkdir -p /var/lib/atolin-build-107/ci; cat > /var/lib/atolin-build-107/ci/$name.log" < "$RUNNER_TEMP/$name.log"; fi
           done
       - name: Remove temporary private source and access
         if: always()
-        run: rm -rf -- private-source "$RUNNER_TEMP/indira-ssh" "$RUNNER_TEMP/source.tar" "$RUNNER_TEMP/verified-106.apk"
+        run: rm -rf -- private-source "$RUNNER_TEMP/indira-ssh" "$RUNNER_TEMP/source.tar" "$RUNNER_TEMP/verified-107.apk"
