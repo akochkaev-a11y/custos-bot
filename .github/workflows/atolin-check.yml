@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      ATOLIN_SOURCE_SHA: 98547885073f73c9d697209d3e57d5b027b6b811
+      ATOLIN_SOURCE_SHA: 36577a93a08b0f2cae535ef3a732062b76b03aa5
     steps:
       - uses: actions/checkout@v4
         with:
