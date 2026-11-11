@@ -1,46 +1,32 @@
 #!/usr/bin/env bash
 set -euo pipefail
-umask 077
-printf 'Custos recovery diagnostics 2026-11-11\n'
-date -u
-for p in /opt/custos/custos.py /etc/custos/config.json /var/lib/custos/archive.sqlite3; do
-  if test -f "$p"; then stat -c '%n %s bytes modified=%y' "$p"; else printf 'Missing: %s\n' "$p"; fi
-done
-systemctl show custos.service -p LoadState -p ActiveState -p SubState -p Result -p NRestarts -p UnitFileState --no-pager || true
-python3 - <<'PY'
-import socket,ssl,urllib.request,urllib.error,json,time
+printf 'Custos network diagnostics\n'
+python3 -u - <<'PY'
+import socket,ssl,concurrent.futures,urllib.request,json
 from pathlib import Path
-host='api.telegram.org'
-try:
-    ips=sorted({x[4][0] for x in socket.getaddrinfo(host,443,type=socket.SOCK_STREAM)})
-    print('Telegram DNS:', ', '.join(ips))
-except OSError as e:
-    print('DNS failed:', type(e).__name__)
-for url in ['https://api.telegram.org','https://telegram.org','https://github.com']:
-    start=time.monotonic()
-    try:
-        with urllib.request.urlopen(url,timeout=10) as r:
-            print(url, 'HTTP',r.status, 'seconds',round(time.monotonic()-start,2))
-    except urllib.error.HTTPError as e:
-        print(url,'HTTP',e.code)
-    except Exception as e:
-        print(url,'failed',type(e).__name__,'seconds',round(time.monotonic()-start,2))
-p=Path('/etc/custos/config.json')
-if p.exists():
-    try:
-        cfg=json.loads(p.read_text())
-        print('Config parsed; token present:',bool(cfg.get('token')),'setup code present:',bool(cfg.get('setup_code')))
-        for method in ('getMe','getWebhookInfo'):
-            req=urllib.request.Request('https://api.telegram.org/bot'+cfg['token']+'/'+method,data=b'{}',headers={'Content-Type':'application/json'})
-            try:
-                with urllib.request.urlopen(req,timeout=10) as r:
-                    data=json.load(r)
-                result=data.get('result',{})
-                print(method,'ok:',data.get('ok'))
-                if method=='getMe': print('Bot username:',result.get('username'))
-                else: print('Webhook configured:',bool(result.get('url')),'pending updates:',result.get('pending_update_count'))
-            except urllib.error.HTTPError as e: print(method,'HTTP',e.code)
-            except Exception as e: print(method,'failed',type(e).__name__)
-    except Exception as e: print('Config check failed:',type(e).__name__)
+print('Proxy configured:',bool(urllib.request.getproxies()),flush=True)
+ips=sorted({(x[0],x[4][0]) for x in socket.getaddrinfo('api.telegram.org',443,type=socket.SOCK_STREAM)})
+def probe(item):
+    family,ip=item
+    for port in (443,80):
+        s=socket.socket(family,socket.SOCK_STREAM);s.settimeout(5)
+        try:
+            s.connect((ip,port))
+            print('TCP',ip,port,'OK',flush=True)
+            if port==443:
+                with ssl.create_default_context().wrap_socket(s,server_hostname='api.telegram.org') as tls:
+                    print('TLS verified',ip,tls.version(),flush=True)
+        except Exception as e: print('Connect',ip,port,type(e).__name__,flush=True)
+        finally:s.close()
+with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:list(pool.map(probe,ips))
+for p in ('/etc/custos','/var/lib/custos'):
+    root=Path(p)
+    print(p,'exists:',root.exists())
+    if root.exists(): print('Names:',','.join(x.name for x in root.iterdir()))
 PY
-printf 'Diagnostics complete\n'
+ip -brief link
+printf 'Proxy listener checks\n'
+for port in 1080 10808 7890 8080 3128; do
+  if ss -H -ltn "sport = :$port" | head -1 | rg -q .; then printf 'Local proxy candidate port %s\n' "$port"; fi
+done
+printf 'Done\n'
